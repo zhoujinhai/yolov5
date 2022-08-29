@@ -54,6 +54,7 @@ from pathlib import Path
 
 import pandas as pd
 import torch
+import torch.nn as nn
 import yaml
 from torch.utils.mobile_optimizer import optimize_for_mobile
 
@@ -153,6 +154,7 @@ def export_onnx(model, im, file, opset, train, dynamic, simplify, prefix=colorst
         } if dynamic else None)
 
     # Checks
+    print("Save path: ", f)
     model_onnx = onnx.load(f)  # load onnx model
     onnx.checker.check_model(model_onnx)  # check onnx model
 
@@ -433,6 +435,50 @@ def export_tfjs(file, prefix=colorstr('TensorFlow.js:')):
     return f, None
 
 
+class SiLU(nn.Module):
+    __constants__ = ['inplace']
+    inplace: bool
+
+    def __init__(self, inplace: bool = False):
+        super(SiLU, self).__init__()
+        self.inplace = inplace
+
+    def forward(self, input):
+        return input * torch.sigmoid(input)
+
+
+def replace_module(module, replaced_module_type, new_module_type, replace_func=None) -> nn.Module:
+    """
+    Replace given type in module to a new type. mostly used in deploy.
+
+    Args:
+        module (nn.Module): model to apply replace operation.
+        replaced_module_type (Type): module type to be replaced.
+        new_module_type (Type)
+        replace_func (function): python function to describe replace logic. Defalut value None.
+
+    Returns:
+        model (nn.Module): module that already been replaced.
+    """
+
+    def default_replace_func(replaced_module_type, new_module_type):
+        return new_module_type()
+
+    if replace_func is None:
+        replace_func = default_replace_func
+
+    model = module
+    if isinstance(module, replaced_module_type):
+        model = replace_func(replaced_module_type, new_module_type)
+    else:  # recurrsively replace
+        for name, child in module.named_children():
+            new_child = replace_module(child, replaced_module_type, new_module_type)
+            if new_child is not child:  # child is already replaced
+                model.add_module(name, new_child)
+
+    return model
+
+
 @smart_inference_mode()
 def run(
         data=ROOT / 'data/coco128.yaml',  # 'dataset.yaml path'
@@ -507,6 +553,7 @@ def run(
     if engine:  # TensorRT required before ONNX
         f[1], _ = export_engine(model, im, file, half, dynamic, simplify, workspace, verbose)
     if onnx or xml:  # OpenVINO requires ONNX
+        model = replace_module(model, nn.SiLU, SiLU)
         f[2], _ = export_onnx(model, im, file, opset, train, dynamic, simplify)
     if xml:  # OpenVINO
         f[3], _ = export_openvino(model, file, half)
