@@ -32,5 +32,5 @@ python detect.py --weights ./runs/train/exp3/weights/best.pt
  model = replace_module(model, nn.SiLU, SiLU)
 
 ```bash
-python export.py --weights ./runs/train/exp3/weights/best.pt --include onnx
+python export.py --weights ./runs/train/exp3/weights/best.pt --include onnx --train
 ```

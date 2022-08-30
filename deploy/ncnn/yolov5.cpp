@@ -12,8 +12,8 @@
 // CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 
-#include "layer.h"
-#include "net.h"
+#include "ncnn/layer.h"
+#include "ncnn/net.h"
 
 #if defined(USE_NCNN_SIMPLEOCV)
 #include "simpleocv.h"
@@ -32,6 +32,9 @@
 #define MAX_STRIDE 64
 #else
 #define MAX_STRIDE 32
+
+// ref: https://github.com/Tencent/ncnn/wiki/how-to-implement-custom-layer-step-by-step
+// ref: https://zhuanlan.zhihu.com/p/275989233
 class YoloV5Focus : public ncnn::Layer
 {
 public:
@@ -229,6 +232,9 @@ static void generate_proposals(const ncnn::Mat& anchors, int stride, const ncnn:
                             class_score = score;
                         }
                     }
+                    //if (class_index == 0) {
+                    //    continue;    // 0 set background
+                    //}
                     float confidence = box_confidence * sigmoid(class_score);
                     if (confidence >= prob_threshold)
                     {
@@ -279,9 +285,9 @@ static int detect_yolov5(const cv::Mat& bgr, std::vector<Object>& objects)
     // original pretrained model from https://github.com/ultralytics/yolov5
     // the ncnn model https://github.com/nihui/ncnn-assets/tree/master/models
 #if YOLOV5_V60
-    if (yolov5.load_param("yolov5s_6.0.param"))
+    if (yolov5.load_param("D:/ncnn/ncnn_install/Release/ncnn_install_no_vulkan/bin/models/toothv5_16.param"))  // yolov5s_6.0.param
         exit(-1);
-    if (yolov5.load_model("yolov5s_6.0.bin"))
+    if (yolov5.load_model("D:/ncnn/ncnn_install/Release/ncnn_install_no_vulkan/bin/models/toothv5_16.bin"))  // yolov5s_6.0.bin
         exit(-1);
 #else
     yolov5.register_custom_layer("YoloV5Focus", YoloV5Focus_layer_creator);
@@ -336,10 +342,12 @@ static int detect_yolov5(const cv::Mat& bgr, std::vector<Object>& objects)
 
     // anchor setting from yolov5/models/yolov5s.yaml
 
+    // https://github.com/Tencent/ncnn/issues/3127
+    // https://github.com/midasklr/yolov5ncnn
     // stride 8
     {
         ncnn::Mat out;
-        ex.extract("output", out);
+        ex.extract("output", out);  // output
 
         ncnn::Mat anchors(6);
         anchors[0] = 10.f;
@@ -359,7 +367,7 @@ static int detect_yolov5(const cv::Mat& bgr, std::vector<Object>& objects)
     {
         ncnn::Mat out;
 #if YOLOV5_V60
-        ex.extract("376", out);
+        ex.extract("365", out);  // 376
 #else
         ex.extract("781", out);
 #endif
@@ -382,7 +390,7 @@ static int detect_yolov5(const cv::Mat& bgr, std::vector<Object>& objects)
     {
         ncnn::Mat out;
 #if YOLOV5_V60
-        ex.extract("401", out);
+        ex.extract("385", out);  // 401
 #else
         ex.extract("801", out);
 #endif
@@ -486,13 +494,15 @@ static void draw_objects(const cv::Mat& bgr, const std::vector<Object>& objects)
 
 int main(int argc, char** argv)
 {
-    if (argc != 2)
+    /*if (argc != 2)
     {
         fprintf(stderr, "Usage: %s [imagepath]\n", argv[0]);
         return -1;
     }
 
-    const char* imagepath = argv[1];
+    const char* imagepath = argv[1];*/
+
+    const char* imagepath = "E:/code/Server223/yolov5/data/images/tooth6.png";
 
     cv::Mat m = cv::imread(imagepath, 1);
     if (m.empty())
